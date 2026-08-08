@@ -1,0 +1,22 @@
+{
+  "slug": "ollama",
+  "version": "v0.32.6-reefy.1",
+  "name": "Ollama (NVIDIA)",
+  "icon": "icon.png",
+  "description": "Run large language models locally with NVIDIA GPU acceleration",
+  "image": "ollama/ollama:0.32.6",
+  "upstream_image": "docker.io/ollama/ollama:0.32.6",
+  "default_port": 11434,
+  "volumes": {
+    "models": {
+      "mount": "/root/.ollama",
+      "uid": 0,
+      "backup": []
+    }
+  },
+  "env": {},
+  "gpu": true,
+  "tags": [
+    "llm"
+  ]
+}

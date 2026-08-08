@@ -1,0 +1,25 @@
+{
+  "slug": "ollama-rocm",
+  "version": "v0.32.6-reefy.1",
+  "name": "Ollama (AMD)",
+  "icon": "icon.png",
+  "description": "Run large language models locally with AMD ROCm acceleration",
+  "image": "ollama/ollama:0.32.6-rocm",
+  "upstream_image": "docker.io/ollama/ollama:0.32.6-rocm",
+  "default_port": 11434,
+  "volumes": {
+    "models": {
+      "mount": "/root/.ollama",
+      "uid": 0,
+      "backup": []
+    }
+  },
+  "env": {},
+  "devices": [
+    "amd.com/gpu=all"
+  ],
+  "gpu": false,
+  "tags": [
+    "llm"
+  ]
+}

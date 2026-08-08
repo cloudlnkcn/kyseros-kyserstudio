@@ -1,0 +1,27 @@
+{
+  "slug": "ollama-intel",
+  "version": "v0.32.6-reefy.1",
+  "name": "Ollama (Intel)",
+  "icon": "icon.png",
+  "description": "Run large language models locally with Intel Vulkan acceleration",
+  "image": "ollama/ollama:0.32.6",
+  "upstream_image": "docker.io/ollama/ollama:0.32.6",
+  "default_port": 11434,
+  "volumes": {
+    "models": {
+      "mount": "/root/.ollama",
+      "uid": 0,
+      "backup": []
+    }
+  },
+  "env": {
+    "OLLAMA_VULKAN": "1"
+  },
+  "devices": [
+    "intel.com/gpu=all"
+  ],
+  "gpu": false,
+  "tags": [
+    "llm"
+  ]
+}
