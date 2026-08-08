@@ -1,6 +1,6 @@
 {
   "slug": "ollama-intel",
-  "version": "v0.32.6-reefy.1",
+  "version": "v0.32.6-reefy.2",
   "name": "Ollama (Intel)",
   "icon": "icon.png",
   "description": "Run large language models locally with Intel Vulkan acceleration",
@@ -15,6 +15,7 @@
     }
   },
   "env": {
+    "OLLAMA_IGPU_ENABLE": "1",
     "OLLAMA_VULKAN": "1"
   },
   "devices": [

@@ -16,14 +16,16 @@ This repository does not rebuild or mirror Ollama. Each package records its
 exact upstream image and uses Reefy's CDI device requests to activate the
 matching host provider.
 
-Intel acceleration uses Ollama's Vulkan backend and sets `OLLAMA_VULKAN=1`.
-The Intel NPU is not requested because Ollama currently targets Intel GPUs,
-not the NPU.
+Intel acceleration uses Ollama's Vulkan backend and sets `OLLAMA_VULKAN=1`
+plus `OLLAMA_IGPU_ENABLE=1`. Ollama 0.32.6 requires the latter opt-in to keep
+integrated GPUs in its scheduler. The Intel NPU is not requested because
+Ollama currently targets Intel GPUs, not the NPU.
 
 ## Versioning
 
-Reefy package versions use `<upstream-release>-reefy.<revision>`. The current
-package is `v0.32.6-reefy.1`, based on Ollama `v0.32.6`.
+Reefy package versions use `<upstream-release>-reefy.<revision>`. NVIDIA and
+AMD use `v0.32.6-reefy.1`; Intel uses `v0.32.6-reefy.2` to include the iGPU
+scheduler opt-in. All variants are based on Ollama `v0.32.6`.
 
 ## Publishing
 

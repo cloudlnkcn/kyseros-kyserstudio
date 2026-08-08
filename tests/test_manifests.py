@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 VARIANTS = {
     'nvidia': {
         'slug': 'ollama',
+        'version': 'v0.32.6-reefy.1',
         'image': 'ollama/ollama:0.32.6',
         'gpu': True,
         'devices': [],
@@ -15,6 +16,7 @@ VARIANTS = {
     },
     'amd': {
         'slug': 'ollama-rocm',
+        'version': 'v0.32.6-reefy.1',
         'image': 'ollama/ollama:0.32.6-rocm',
         'gpu': False,
         'devices': ['amd.com/gpu=all'],
@@ -22,10 +24,14 @@ VARIANTS = {
     },
     'intel': {
         'slug': 'ollama-intel',
+        'version': 'v0.32.6-reefy.2',
         'image': 'ollama/ollama:0.32.6',
         'gpu': False,
         'devices': ['intel.com/gpu=all'],
-        'env': {'OLLAMA_VULKAN': '1'},
+        'env': {
+            'OLLAMA_IGPU_ENABLE': '1',
+            'OLLAMA_VULKAN': '1',
+        },
     },
 }
 
@@ -41,7 +47,7 @@ class ManifestTests(unittest.TestCase):
             manifest = load_manifest(variant)
             manifests[variant] = manifest
             self.assertEqual(manifest['slug'], expected['slug'])
-            self.assertEqual(manifest['version'], 'v0.32.6-reefy.1')
+            self.assertEqual(manifest['version'], expected['version'])
             self.assertEqual(manifest['image'], expected['image'])
             self.assertEqual(manifest['upstream_image'], 'docker.io/' + expected['image'])
             self.assertEqual(manifest['gpu'], expected['gpu'])
