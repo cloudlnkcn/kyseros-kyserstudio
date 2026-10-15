@@ -1,15 +1,16 @@
 {
-  "slug": "ollama",
-  "version": "v0.32.6-reefy.1",
-  "name": "Ollama (NVIDIA)",
+  "slug": "kyserai",
+  "version": "v10.25.5-kyseros.1",
+  "name": "Kyserai (NVIDIA)",
   "icon": "icon.png",
-  "description": "Run large language models locally with NVIDIA GPU acceleration",
-  "image": "ollama/ollama:0.32.6",
-  "upstream_image": "docker.io/ollama/ollama:0.32.6",
-  "default_port": 11434,
+  "description": "Local LLM server with OpenAI-compatible APIs, accelerated by NVIDIA CUDA GPUs",
+  "image": "kyserai:v10.25.5-nvidia",
+  "source": "https://github.com/cloudlnkcn/kyserai",
+  "source_ref": "v10.25.5",
+  "default_port": 13305,
   "volumes": {
-    "models": {
-      "mount": "/root/.ollama",
+    "data": {
+      "mount": "/var/lib/kyserai",
       "uid": 0,
       "backup": []
     }

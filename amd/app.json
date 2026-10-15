@@ -1,15 +1,16 @@
 {
-  "slug": "ollama-rocm",
-  "version": "v0.32.6-reefy.1",
-  "name": "Ollama (AMD)",
+  "slug": "kyserai-rocm",
+  "version": "v10.25.5-kyseros.1",
+  "name": "Kyserai (AMD)",
   "icon": "icon.png",
-  "description": "Run large language models locally with AMD ROCm acceleration",
-  "image": "ollama/ollama:0.32.6-rocm",
-  "upstream_image": "docker.io/ollama/ollama:0.32.6-rocm",
-  "default_port": 11434,
+  "description": "Local LLM server with OpenAI-compatible APIs, accelerated by AMD ROCm GPUs and XDNA2 NPUs",
+  "image": "kyserai:v10.25.5-amd",
+  "source": "https://github.com/cloudlnkcn/kyserai",
+  "source_ref": "v10.25.5",
+  "default_port": 13305,
   "volumes": {
-    "models": {
-      "mount": "/root/.ollama",
+    "data": {
+      "mount": "/var/lib/kyserai",
       "uid": 0,
       "backup": []
     }

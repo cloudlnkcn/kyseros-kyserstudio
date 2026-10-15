@@ -1,23 +1,21 @@
 {
-  "slug": "ollama-intel",
-  "version": "v0.32.6-reefy.2",
-  "name": "Ollama (Intel)",
+  "slug": "kyserai-intel",
+  "version": "v10.25.5-kyseros.1",
+  "name": "Kyserai (Intel)",
   "icon": "icon.png",
-  "description": "Run large language models locally with Intel Vulkan acceleration",
-  "image": "ollama/ollama:0.32.6",
-  "upstream_image": "docker.io/ollama/ollama:0.32.6",
-  "default_port": 11434,
+  "description": "Local LLM server with OpenAI-compatible APIs, accelerated by Intel GPUs via Vulkan and SYCL",
+  "image": "kyserai:v10.25.5-intel",
+  "source": "https://github.com/cloudlnkcn/kyserai",
+  "source_ref": "v10.25.5",
+  "default_port": 13305,
   "volumes": {
-    "models": {
-      "mount": "/root/.ollama",
+    "data": {
+      "mount": "/var/lib/kyserai",
       "uid": 0,
       "backup": []
     }
   },
-  "env": {
-    "OLLAMA_IGPU_ENABLE": "1",
-    "OLLAMA_VULKAN": "1"
-  },
+  "env": {},
   "devices": [
     "intel.com/gpu=all"
   ],
