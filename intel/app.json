@@ -1,12 +1,12 @@
 {
   "slug": "kyserai-intel",
-  "version": "v10.25.5-kyseros.1",
+  "version": "v10.25.7-kyseros.1",
   "name": "Kyserai (Intel)",
   "icon": "icon.png",
   "description": "Local LLM server with OpenAI-compatible APIs, accelerated by Intel GPUs via Vulkan and SYCL",
-  "image": "kyserai:v10.25.5-intel",
+  "image": "kyserai:v10.25.7-kyseros.1",
   "source": "https://github.com/cloudlnkcn/kyserai",
-  "source_ref": "v10.25.5",
+  "source_ref": "v10.25.7",
   "default_port": 13305,
   "volumes": {
     "data": {
@@ -16,10 +16,10 @@
     }
   },
   "env": {},
+  "gpu": false,
   "devices": [
     "intel.com/gpu=all"
   ],
-  "gpu": false,
   "tags": [
     "llm"
   ]

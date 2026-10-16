@@ -5,31 +5,25 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = 'v10.25.5-kyseros.1'
+VERSION = 'v10.25.7-kyseros.1'
 SOURCE = 'https://github.com/cloudlnkcn/kyserai'
-SOURCE_REF = 'v10.25.5'
-IMAGE_BASE = 'kyserai'
+SOURCE_REF = 'v10.25.7'
+IMAGE = f'kyserai:{VERSION}'
+# One shared image; the accelerator association lives in each
+# variant's CDI request, matched to the Kyseros provider repo
+# (kyseros-nvidia / kyseros-amd / kyseros-intel) that publishes it.
 VARIANTS = {
     'nvidia': {
         'slug': 'kyserai',
-        'image_tag': 'v10.25.5-nvidia',
-        'gpu': True,
-        'devices': [],
-        'env': {},
+        'cdi': 'nvidia.com/gpu=all',
     },
     'amd': {
         'slug': 'kyserai-rocm',
-        'image_tag': 'v10.25.5-amd',
-        'gpu': False,
-        'devices': ['amd.com/gpu=all'],
-        'env': {},
+        'cdi': 'amd.com/gpu=all',
     },
     'intel': {
         'slug': 'kyserai-intel',
-        'image_tag': 'v10.25.5-intel',
-        'gpu': False,
-        'devices': ['intel.com/gpu=all'],
-        'env': {},
+        'cdi': 'intel.com/gpu=all',
     },
 }
 
@@ -39,19 +33,25 @@ def load_manifest(variant):
 
 
 class ManifestTests(unittest.TestCase):
-    def test_variants_are_consistent_and_hardware_specific(self):
+    def test_variants_share_one_image_and_request_their_provider(self):
         manifests = {}
         for variant, expected in VARIANTS.items():
             manifest = load_manifest(variant)
             manifests[variant] = manifest
             self.assertEqual(manifest['slug'], expected['slug'])
             self.assertEqual(manifest['version'], VERSION)
-            self.assertEqual(manifest['image'], f'{IMAGE_BASE}:{expected["image_tag"]}')
+            self.assertEqual(manifest['image'], IMAGE)
             self.assertEqual(manifest['source'], SOURCE)
             self.assertEqual(manifest['source_ref'], SOURCE_REF)
-            self.assertEqual(manifest['gpu'], expected['gpu'])
-            self.assertEqual(manifest.get('devices', []), expected['devices'])
-            self.assertEqual(manifest['env'], expected['env'])
+            # provider association: an explicit, exclusive CDI request
+            # selects the matching Kyseros host provider artifact
+            self.assertEqual(manifest['gpu'], False)
+            self.assertEqual(manifest['devices'], [expected['cdi']])
+            for other in VARIANTS:
+                if other == variant:
+                    continue
+                self.assertNotIn(VARIANTS[other]['cdi'], manifest['devices'])
+            self.assertEqual(manifest['env'], {})
             self.assertEqual(manifest['default_port'], 13305)
             self.assertEqual(
                 manifest['volumes']['data']['mount'], '/var/lib/kyserai')
@@ -67,7 +67,7 @@ class ManifestTests(unittest.TestCase):
             text = (ROOT / variant / 'app.json').read_text()
             self.assertNotIn('ollama', text.lower(), str(variant))
             self.assertTrue(
-                load_manifest(variant)['image'].startswith(f'{IMAGE_BASE}:'))
+                load_manifest(variant)['image'].startswith('kyserai:'))
 
     def test_icons_are_square_512_png_files(self):
         for variant in VARIANTS:
@@ -83,10 +83,48 @@ class ManifestTests(unittest.TestCase):
     def test_dockerfile_builds_kyserai_from_named_context(self):
         dockerfile = (ROOT / 'Dockerfile').read_text()
         self.assertIn('COPY --from=kyserai . /app', dockerfile)
-        self.assertIn('ARG GPU_VARIANT=nvidia', dockerfile)
-        for variant in VARIANTS:
-            self.assertIn(variant, dockerfile)
         self.assertIn('EXPOSE 13305', dockerfile)
+
+    def test_dockerfile_builds_one_image_without_gpu_variant(self):
+        # variants differ only in their CDI request, never in image
+        # content, so there is no per-variant build knob
+        dockerfile = (ROOT / 'Dockerfile').read_text()
+        self.assertNotIn('GPU_VARIANT', dockerfile)
+        self.assertNotIn('build-arg', dockerfile)
+        self.assertEqual(dockerfile.count('FROM ubuntu:'), 3)
+
+    def test_dockerfile_bakes_in_no_driver_stack(self):
+        # kernel modules, firmware, CUDA / ROCm / XRT user space and
+        # the Vulkan ICDs all come from the OS host provider via CDI;
+        # comments are stripped so only real build steps are checked
+        dockerfile = '\n'.join(
+            line for line in (ROOT / 'Dockerfile').read_text().splitlines()
+            if not line.lstrip().startswith('#')).lower()
+        for banned in ('cuda', 'rocm', 'xrt', 'nvidia-container',
+                       'nvidia-ctk', 'amd-ctk', 'amd-team', 'add-apt-repository',
+                       'libnvidia', 'libcuda'):
+            self.assertNotIn(banned, dockerfile)
+
+    def test_dockerfile_ships_vulkan_loader_in_common_layer(self):
+        # the Vulkan loader is the one piece of the Vulkan stack the
+        # provider contract leaves to the app image
+        dockerfile = (ROOT / 'Dockerfile').read_text()
+        self.assertIn('libvulkan1', dockerfile)
+        self.assertIn('vulkan-tools', dockerfile)
+        self.assertFalse((ROOT / 'vulkan').exists())
+        for variant in ('nvidia', 'amd', 'intel'):
+            text = (ROOT / variant / 'app.json').read_text()
+            self.assertNotIn('vulkan.com/gpu', text)
+
+    def test_dockerfile_builds_current_vulkan_loader(self):
+        # the pinned Khronos build overrides Ubuntu's 1.3.x package
+        dockerfile = (ROOT / 'Dockerfile').read_text()
+        self.assertIn('ARG VULKAN_VERSION=', dockerfile)
+        self.assertIn('github.com/KhronosGroup/Vulkan-Loader.git', dockerfile)
+        self.assertIn('github.com/KhronosGroup/Vulkan-Headers.git', dockerfile)
+        self.assertIn('COPY --from=vulkan-loader', dockerfile)
+        self.assertLess(dockerfile.index('AS vulkan-loader'),
+                        dockerfile.index('COPY --from=vulkan-loader'))
 
     def test_repository_text_uses_plain_hyphens(self):
         for path in ROOT.rglob('*'):

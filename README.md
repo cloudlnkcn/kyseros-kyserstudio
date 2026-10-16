@@ -1,60 +1,112 @@
-# Kyserai GPU apps for KyserOS
+# Kyserai app for KyserOS
 
 KyserOS app manifests and container build process for [Kyserai](https://github.com/cloudlnkcn/kyserai),
 a local LLM server with OpenAI-compatible REST APIs, published in NVIDIA,
 AMD, and Intel GPU variants.
 
-## Variants
+## One image, one provider association per variant
 
-| KyserOS app | Manifest | Image | Accelerator |
+All three variants ship the same program from one shared image. What differs
+is only the OS provider each variant manifest is associated with: an explicit
+CDI request in `devices` selects the matching KyserOS host provider artifact
+(kernel modules, firmware, and driver user space built by the sibling
+provider repositories and pinned to the OS build). KyserOS prepares the
+requested provider before the container starts, injects its CDI resources,
+and silently drops the request when the provider is not available so the app
+always starts and Kyserai falls back to CPU.
+
+| KyserOS app | Manifest | OS provider repo | CDI request |
 |---|---|---|---|
-| `kyserai` | `nvidia/app.json` | `kyserai:v10.25.5-nvidia` | NVIDIA CUDA |
-| `kyserai-rocm` | `amd/app.json` | `kyserai:v10.25.5-amd` | AMD ROCm / XDNA2 NPU |
-| `kyserai-intel` | `intel/app.json` | `kyserai:v10.25.5-intel` | Intel Vulkan / SYCL |
+| `kyserai` | `nvidia/app.json` | `kyseros-nvidia` | `nvidia.com/gpu=all` |
+| `kyserai-rocm` | `amd/app.json` | `kyseros-amd` | `amd.com/gpu=all` |
+| `kyserai-intel` | `intel/app.json` | `kyseros-intel` | `intel.com/gpu=all` |
 
-All three variants ship the same Kyserai program. The images differ only in
-runtime libraries: the AMD image additionally carries the XRT user space used
-by the FastFlowLM NPU backend. No GPU toolkit is baked in beyond that -
-inference backends (llama.cpp, sd.cpp, FastFlowLM) are downloaded at runtime
-by Kyserai itself, matched to the accelerator that KyserOS publishes via CDI
-(`nvidia.com/gpu`, `amd.com/gpu=all`, `intel.com/gpu=all`).
+A variant's directory name (`nvidia` / `amd` / `intel`) is the catalog's
+variant column; the slug and the CDI request keep the manifest and its
+provider a matched pair.
+
+## No drivers are baked in
+
+Following the KyserOS provider contract, the image carries no GPU driver
+stack at all:
+
+- The provider host extensions own everything driver-shaped. The NVIDIA
+  provider injects `libcuda`, the NVIDIA Vulkan ICD, and the device nodes;
+  the AMD provider injects the RADV ICD and its libdrm alongside `amdgpu`;
+  the Intel provider injects the i915/xe render nodes. Nothing in this
+  repository duplicates any of it.
+- The image supplies only what the contract leaves to the app: the current
+  Khronos Vulkan loader, built from source at the `VULKAN_VERSION` pin in
+  the Dockerfile (newer than Ubuntu's distro package) plus `vulkan-tools`,
+  and Kyserai's common runtime libraries. The Vulkan llama.cpp backend
+  works on every variant because the loader scans the ICD that the
+  provider's CDI spec mounts in.
+- The remaining inference backends (llama.cpp CUDA / ROCm / SYCL, sd.cpp,
+  FastFlowLM) are downloaded at runtime by Kyserai itself, so their CUDA
+  and ROCm runtimes arrive with the backend, never inside the image.
+
+FastFlowLM on the AMD XDNA2 NPU needs the `amdxdna` driver, NPU
+firmware, and the XRT user space, which are driver components and
+therefore the AMD provider's responsibility: `kyseros-amd` ships all
+three, and its CDI spec adds the `/dev/accel/*` device nodes and the XRT
+libraries to GPU containers when an NPU is bound. Nothing NPU-related is
+baked into this image.
 
 ## Container build
 
 The [Dockerfile](Dockerfile) builds Kyserai from the sibling `kyserai`
-checkout, supplied as the named build context `kyserai`:
+checkout, supplied as the named build context `kyserai`. One build serves
+all three variants:
 
 ```sh
 docker buildx build \
     --build-context kyserai=../kyserai \
-    --build-arg GPU_VARIANT=nvidia \
-    -t kyserai:nvidia .
+    -t kyserai:v10.25.7-kyseros.1 .
 ```
 
-`GPU_VARIANT` is one of `nvidia`, `amd`, `intel`. Local builds require the
-`kyserai` repository checked out next to this one.
-
-## CI build
-
-`.github/workflows/build.yml` builds the three variants from the pinned
-kyserai ref as a build check. Nothing is pushed to a registry: images load
-into the runner's local docker as `kyserai:<kyserai-ref>-<variant>` and
-`kyserai:<variant>` and are discarded with the job. Deployment images come
-from local builds (see above) or from mirroring the built images to wherever
-KyserOS loads them from.
+Local builds require the `kyserai` repository checked out next to this one.
+Local builds are the only build path: there is no CI image build workflow.
+Build the image and mirror it to wherever KyserOS loads it from.
 
 ## Versioning
 
-KyserOS package versions use `<kyserai-release>-kyseros.<revision>`. All
-three variants are currently `v10.25.5-kyseros.1`, based on Kyserai
-`v10.25.5`. Bump the version together with the `KYSERAI_REF` pin in
-`build.yml` and the tags in each manifest.
+KyserOS package versions use `<kyserai-release>-kyseros.<revision>`. The
+current release is `v10.25.7-kyseros.1`, based on Kyserai `v10.25.7`, and
+the image tag matches the package version. Bump the version together with
+the `source_ref` and `image` in each manifest and the `VULKAN_VERSION` pin
+in the Dockerfile.
 
 ## Publishing
 
-KyserOS's catalog imports each manifest from this repository by an immutable
-git tag. The app publisher uploads the matching relative `icon.png` to the
-KyserOS CDN and stores the assembled catalog entry in PostgreSQL. No KyserOS
+Publishing is two halves: manifests reach the catalog through git, the
+image reaches the registry through one script. The manifest half goes
+first; a freshly published catalog entry is not installable until the
+image half binds the registry reference onto it.
+
+1. Manifests: commit, tag, and push. On the cloud service, run a catalog
+   sync and publish the pending staging entries (or author the entries
+   in the dashboard). The matching relative `icon.png` goes to the
+   KyserOS CDN once per release.
+2. Image and bindings, with the service login (values recorded in the
+   kyseros-amd AGENTS.md):
+
+   ```sh
+   KYSEROS_SERVICE_EMAIL=... KYSEROS_SERVICE_PASSWORD=... \
+       scripts/publish.sh --provider-ref \
+       'updates.cloudlnk.cn:5000/kyseros-providers/amd-driver@sha256:<digest>'
+   ```
+
+   This builds the shared image from the sibling `kyserai` checkout,
+   uploads it under `kyseros-apps/kyserai`, binds the registry reference
+   to all three catalog entries, and binds the digest-pinned AMD
+   provider to `kyserai-rocm`. Rerun with `--skip-build` when only the
+   bindings change, and `--sync` to trigger a catalog sync and show the
+   pending review queue. The NVIDIA and Intel providers bind the same
+   way with their own references.
+
+The provider artifact carries the OS build id and kernel ABI digest, and
+the device verifies both against the running slot at activation, so the
+app, its provider, and the OS always stay a matched set. No KyserOS
 backend container deployment is required for an app release.
 
 ## Validation

@@ -1,5 +1,6 @@
 # ============================================================
-# Kyserai GPU app images for KyserOS: nvidia / amd / intel.
+# Kyserai app image for KyserOS: one image for every GPU
+# provider variant.
 #
 # The app program is Kyserai itself, built from the sibling
 # kyserai checkout supplied as the named build context
@@ -7,13 +8,24 @@
 #
 #   docker buildx build \
 #       --build-context kyserai=../kyserai \
-#       --build-arg GPU_VARIANT=nvidia \
-#       -t kyserai:nvidia .
+#       -t kyserai:v10.25.7-kyseros.1 .
 #
+# Per the KyserOS provider contract (kyseros-nvidia, kyseros-amd,
+# kyseros-intel), the image ships no GPU driver stack: kernel
+# modules, firmware, and driver user space (CUDA, ROCm, XRT, the
+# Vulkan ICDs) come from the OS host provider that the variant
+# manifest's CDI request selects, injected when the container
+# starts. The image only carries the Vulkan loader, which the
+# contract makes the app's own responsibility, plus Kyserai's
+# common runtime libraries.
 # ============================================================
 # syntax=docker/dockerfile:1
 
 ARG UBUNTU_VERSION=24.04
+
+# Pinned Khronos Vulkan release built for every variant (Ubuntu
+# 24.04 ships an older 1.3.x loader in its distro packages).
+ARG VULKAN_VERSION=1.4.365
 
 # ------------------------------------------------------------
 # 1. Build stage: compile the Kyserai C++ server and web app
@@ -45,19 +57,59 @@ RUN rm -rf build \
     && cmake --build --preset default web-app
 
 # ------------------------------------------------------------
-# 2. Runtime stage: lean image, GPU stacks stay on the host
-#    (KyserOS publishes CDI for the matched accelerator).
-#    llama.cpp / sd.cpp / FLM backends are downloaded at
-#    runtime by Kyserai itself, so no GPU toolkit is baked in.
+# 2. Vulkan loader stage: build the current Khronos loader
+#    release (VULKAN_VERSION) so all variants get the latest
+#    loader instead of Ubuntu's distro package
 # ------------------------------------------------------------
-FROM ubuntu:${UBUNTU_VERSION}
+FROM ubuntu:${UBUNTU_VERSION} AS vulkan-loader
 
-ARG GPU_VARIANT=nvidia
+ARG VULKAN_VERSION
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Common runtime libraries for kyseraid plus the Vulkan loader
-# (used by the vulkan and SYCL llama.cpp backends).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    ninja-build \
+    git \
+    ca-certificates \
+    libx11-xcb-dev \
+    libxkbcommon-dev \
+    libwayland-dev \
+    libxrandr-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN git clone --depth 1 --branch v${VULKAN_VERSION} \
+        https://github.com/KhronosGroup/Vulkan-Headers.git \
+    && cmake -S Vulkan-Headers -B Vulkan-Headers/build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/opt/vulkan \
+    && cmake --install Vulkan-Headers/build
+
+RUN git clone --depth 1 --branch v${VULKAN_VERSION} \
+        https://github.com/KhronosGroup/Vulkan-Loader.git \
+    && cmake -S Vulkan-Loader -B Vulkan-Loader/build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_TESTS=OFF \
+        -DVULKAN_HEADERS_INSTALL_DIR=/opt/vulkan \
+        -DCMAKE_INSTALL_PREFIX=/opt/vulkan \
+    && cmake --build Vulkan-Loader/build --target vulkan \
+    && cmake --install Vulkan-Loader/build
+
+# ------------------------------------------------------------
+# 3. Runtime stage: lean image, the GPU stack stays on the
+#    host (KyserOS publishes CDI for the matched provider).
+#    llama.cpp / sd.cpp / FLM backends - including the CUDA and
+#    ROCm runtimes they need - are downloaded at runtime by
+#    Kyserai itself, so nothing driver-shaped is baked in.
+# ------------------------------------------------------------
+FROM ubuntu:${UBUNTU_VERSION}
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Common runtime libraries for kyseraid plus the distro Vulkan
+# loader and tools. The loader is shared by every variant and
+# feeds the Vulkan and SYCL llama.cpp backends.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libcurl4 \
@@ -73,17 +125,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
     && rm -rf /var/lib/apt/lists/*
 
-# AMD only: XRT user space for the FastFlowLM NPU backend.
-# FLM itself auto-installs on demand at runtime.
-RUN if [ "$GPU_VARIANT" = "amd" ]; then \
-        apt-get update && apt-get install -y --no-install-recommends \
-            software-properties-common \
-        && add-apt-repository -y ppa:amd-team/xrt \
-        && apt-get update && apt-get install -y --no-install-recommends \
-            libxrt2 \
-            libxrt-npu2 \
-        && rm -rf /var/lib/apt/lists/*; \
-    fi
+# Override the distro libvulkan1 with the current Khronos loader;
+# /usr/local/lib wins the ldconfig cache over the distro path.
+COPY --from=vulkan-loader /opt/vulkan/lib/libvulkan.so.1* /usr/local/lib/
+RUN ldconfig
+
+# The matched provider's CDI spec supplies the GPU device nodes
+# and its driver user space (ICDs, libdrm, libcuda, RADV) at
+# container start; XRT for the XDNA2 NPU is likewise the AMD
+# provider's responsibility, not an image ingredient.
 
 WORKDIR /opt/kyserai
 
