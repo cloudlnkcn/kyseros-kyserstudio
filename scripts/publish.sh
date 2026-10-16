@@ -22,14 +22,17 @@ usage() {
     cat >&2 <<'EOF'
 Usage: scripts/publish.sh [options]
 
-  --skip-build      upload the existing local image instead of building
-  --sync            trigger a catalog sync and list pending entries
-  --provider-ref    bind this explicit digest-pinned provider reference
-                    instead of the latest amd-driver on the service
-  --no-provider     leave the provider binding untouched
-  --github-mirror   prefix for the Dockerfile's GitHub clones, for
-                    example https://ghfast.top/ (also via the
-                    KYSEROS_GITHUB_MIRROR environment variable)
+  --skip-build           upload the existing local image instead of building
+  --sync                 trigger a catalog sync and list pending entries
+  --import-manifests     upload the local {variant}/app.json files to the
+                         service's manifest import (staging queue) instead
+                         of waiting for the GitHub repo sync
+  --provider-ref         bind this explicit digest-pinned provider reference
+                         instead of the latest amd-driver on the service
+  --no-provider          leave the provider binding untouched
+  --github-mirror        prefix for the Dockerfile's GitHub clones, for
+                         example https://ghfast.top/ (also via the
+                         KYSEROS_GITHUB_MIRROR environment variable)
 
 By default the script binds the newest kyseros-providers/amd-driver
 upload recorded on the service (the digest the kyseros-amd publish.sh
@@ -40,6 +43,7 @@ EOF
 
 skip_build=0
 run_sync=0
+import_manifests=0
 provider_mode=auto        # auto | explicit | skip
 provider_ref=
 # Unset env keeps the ghfast.top default; an explicitly empty value
@@ -49,6 +53,7 @@ while [ $# -gt 0 ]; do
     case $1 in
         --skip-build) skip_build=1 ;;
         --sync) run_sync=1 ;;
+        --import-manifests) import_manifests=1 ;;
         --provider-ref) provider_mode=explicit
             [ $# -ge 2 ] || usage; provider_ref=$2; shift ;;
         --no-provider) provider_mode=skip ;;
@@ -77,6 +82,24 @@ manifest_field() {
         "$1" "$2"
 }
 
+post_bind() {
+    # post_bind <label> <path> <json-payload>
+    label=$1 path=$2 payload=$3
+    if code=$(curl -sS -b "$cookie" -H 'Content-Type: application/json' \
+            -d "$payload" -o "$response" -w '%{http_code}' \
+            "$service_url$path"); then
+        :
+    else
+        code=000
+    fi
+    if [ "$code" = 200 ]; then
+        echo "bound: $label"
+    else
+        echo "binding $label failed (HTTP $code): $(cat "$response")" >&2
+        return 1
+    fi
+}
+
 image=$(manifest_field nvidia/app.json image)
 image_repo=${image%%:*}
 image_tag=${image#*:}
@@ -96,6 +119,23 @@ login_payload=$(python3 -c 'import json, os; print(json.dumps({
     "password": os.environ["KYSEROS_SERVICE_PASSWORD"]}))')
 curl -fsS -c "$cookie" -H 'Content-Type: application/json' \
     -d "$login_payload" "$service_url/api/login" >/dev/null
+
+if [ "$import_manifests" -eq 1 ]; then
+    for variant in nvidia amd intel; do
+        manifest_file="$variant/app.json"
+        if code=$(curl -sS -b "$cookie" \
+                -F "file=@$manifest_file;type=application/json" \
+                -F "variant=$variant" -o "$response" -w '%{http_code}' \
+                "$service_url/api/catalog/import") && [ "$code" = 200 ]; then
+            echo "imported: $manifest_file -> $(cat "$response")"
+        else
+            echo "importing $manifest_file failed (HTTP $code):" \
+                "$(cat "$response")" >&2
+            failed_imports=1
+        fi
+    done
+    [ -z "${failed_imports:-}" ] || exit 1
+fi
 
 if [ "$run_sync" -eq 1 ]; then
     app_repo=$(git remote get-url origin 2>/dev/null \
@@ -143,24 +183,6 @@ reference=$(curl -fsS -b "$cookie" \
     "$service_url/api/registry/images" \
     | python3 -c 'import json, sys; print(json.load(sys.stdin)["reference"])')
 echo "Uploaded: $reference"
-
-post_bind() {
-    # post_bind <label> <path> <json-payload>
-    label=$1 path=$2 payload=$3
-    if code=$(curl -sS -b "$cookie" -H 'Content-Type: application/json' \
-            -d "$payload" -o "$response" -w '%{http_code}' \
-            "$service_url$path"); then
-        :
-    else
-        code=000
-    fi
-    if [ "$code" = 200 ]; then
-        echo "bound: $label"
-    else
-        echo "binding $label failed (HTTP $code): $(cat "$response")" >&2
-        return 1
-    fi
-}
 
 failed=0
 for slug in $slugs; do
