@@ -1,7 +1,8 @@
 #!/bin/sh
 # Build the Kyserai image and publish it to the Kyseros cloud service:
 # upload the docker-save archive into the internal registry, then bind
-# the returned reference onto this app's catalog entries.
+# the returned reference onto this app's catalog entries, and bind the
+# latest published AMD provider digest onto the AMD entry.
 #
 # Manifests reach the catalog through git plus the service's catalog
 # sync (or dashboard authoring). Publish them first: a fresh catalog
@@ -19,24 +20,32 @@ cd "$(dirname "$0")/.."
 
 usage() {
     cat >&2 <<'EOF'
-Usage: scripts/publish.sh [--skip-build] [--sync] [--provider-ref REF]
+Usage: scripts/publish.sh [options]
 
   --skip-build      upload the existing local image instead of building
   --sync            trigger a catalog sync and list pending entries
-  --provider-ref    also bind this digest-pinned provider reference to
-                    the AMD catalog entry (kyserai-rocm)
+  --provider-ref    bind this explicit digest-pinned provider reference
+                    instead of the latest amd-driver on the service
+  --no-provider     leave the provider binding untouched
+
+By default the script binds the newest kyseros-providers/amd-driver
+upload recorded on the service (the digest the kyseros-amd publish.sh
+printed) to the AMD catalog entry.
 EOF
     exit 2
 }
 
 skip_build=0
 run_sync=0
+provider_mode=auto        # auto | explicit | skip
 provider_ref=
 while [ $# -gt 0 ]; do
     case $1 in
         --skip-build) skip_build=1 ;;
         --sync) run_sync=1 ;;
-        --provider-ref) [ $# -ge 2 ] || usage; provider_ref=$2; shift ;;
+        --provider-ref) provider_mode=explicit
+            [ $# -ge 2 ] || usage; provider_ref=$2; shift ;;
+        --no-provider) provider_mode=skip ;;
         *) usage ;;
     esac
     shift
@@ -67,6 +76,8 @@ image_tag=${image#*:}
 slugs=$(for variant in nvidia amd intel; do
     manifest_field "$variant/app.json" slug
 done)
+amd_slug=$(manifest_field amd/app.json slug)
+provider_name=amd-driver
 
 cookie=$(mktemp)
 archive=$(mktemp)
@@ -130,17 +141,38 @@ for slug in $slugs; do
         "{\"reference\":\"$reference\"}" || failed=1
 done
 
-if [ -n "$provider_ref" ]; then
-    amd_slug=$(manifest_field amd/app.json slug)
+if [ "$provider_mode" != skip ]; then
+    if [ "$provider_mode" = explicit ]; then
+        provider_reference=$provider_ref
+    else
+        # The service upserts the provider row per repo:tag, so the
+        # newest kyseros-providers/<name> row is the live digest.
+        provider_reference=$(curl -fsS -b "$cookie" \
+            "$service_url/api/registry/images" | python3 -c '
+import json, sys
+wanted = "kyseros-providers/" + sys.argv[1]
+for image in json.load(sys.stdin).get("images", []):
+    if image["repo"] == wanted:
+        print(image["reference"] + "@" + image["digest"])
+        break
+' "$provider_name")
+        [ -n "$provider_reference" ] || {
+            echo "no $provider_name upload found on the service;" \
+                "publish it first (kyseros-amd scripts/publish.sh)" \
+                "or pass --provider-ref" >&2
+            exit 1
+        }
+        echo "Latest provider: $provider_reference"
+    fi
     post_bind "provider -> $amd_slug" "/api/catalog/$amd_slug/provider" \
-        "{\"reference\":\"$provider_ref\"}" || failed=1
+        "{\"reference\":\"$provider_reference\"}" || failed=1
 fi
 
 if [ "$failed" -ne 0 ]; then
     echo "Some bindings failed. If a catalog entry does not exist yet," \
         "push the manifests, run the catalog sync and staging publish" \
-        "(scripts/publish.sh --sync shows the queue), then rerun this" \
-        "script with --skip-build." >&2
+        "(scripts/publish.sh --sync --skip-build shows the queue), then" \
+        "rerun this script with --skip-build." >&2
     exit 1
 fi
 echo "Done: the image left this machine; the manifests stay in git."

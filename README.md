@@ -92,17 +92,18 @@ image half binds the registry reference onto it.
 
    ```sh
    KYSEROS_SERVICE_EMAIL=... KYSEROS_SERVICE_PASSWORD=... \
-       scripts/publish.sh --provider-ref \
-       'updates.cloudlnk.cn:5000/kyseros-providers/amd-driver@sha256:<digest>'
+       scripts/publish.sh
    ```
 
    This builds the shared image from the sibling `kyserai` checkout,
    uploads it under `kyseros-apps/kyserai`, binds the registry reference
-   to all three catalog entries, and binds the digest-pinned AMD
-   provider to `kyserai-rocm`. Rerun with `--skip-build` when only the
-   bindings change, and `--sync` to trigger a catalog sync and show the
-   pending review queue. The NVIDIA and Intel providers bind the same
-   way with their own references.
+   to all three catalog entries, and binds the newest
+   `kyseros-providers/amd-driver` upload on the service (its current
+   digest) to `kyserai-rocm` - no digest to copy by hand. Rerun with
+   `--skip-build` when only the bindings change, `--sync` to trigger a
+   catalog sync and show the pending review queue, `--provider-ref REF`
+   to bind an explicit reference (the NVIDIA and Intel providers go
+   this way), and `--no-provider` to leave the provider binding alone.
 
 The provider artifact carries the OS build id and kernel ABI digest, and
 the device verifies both against the running slot at activation, so the
