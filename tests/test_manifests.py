@@ -93,6 +93,39 @@ class ManifestTests(unittest.TestCase):
         self.assertNotIn('build-arg', dockerfile)
         self.assertEqual(dockerfile.count('FROM ubuntu:'), 3)
 
+    def test_dockerfile_supports_a_github_mirror_prefix(self):
+        # the Khronos clones go through the ghfast.top proxy by default
+        # (build networks cannot reach github.com directly); an empty
+        # GITHUB_MIRROR falls back to the upstream URLs
+        dockerfile = (ROOT / 'Dockerfile').read_text()
+        self.assertIn('ARG GITHUB_MIRROR=https://ghfast.top/', dockerfile)
+        self.assertIn('${GITHUB_MIRROR}https://github.com/KhronosGroup',
+                      dockerfile)
+        self.assertIn('https://github.com/KhronosGroup/Vulkan-Loader.git',
+                      dockerfile)
+        publish = (ROOT / 'scripts' / 'publish.sh').read_text()
+        self.assertIn('GITHUB_MIRROR="$github_mirror"', publish)
+        self.assertIn(
+            '${KYSEROS_GITHUB_MIRROR-https://ghfast.top/}', publish)
+        # the provider bind reference must be tag-less: the service
+        # matches the DB repo exactly against registry_url + repo
+        self.assertIn('/api/catalog/sources', publish)
+        self.assertIn('image["repo"] + "@" + image["digest"]', publish)
+
+    def test_dockerfile_apt_defaults_to_the_aliyun_mirror(self):
+        # every apt stage rewrites the distro sources to the Aliyun
+        # mirror before installing anything
+        dockerfile = (ROOT / 'Dockerfile').read_text()
+        self.assertEqual(
+            dockerfile.count('ARG APT_MIRROR=mirrors.aliyun.com'), 1)
+        self.assertEqual(dockerfile.count('ARG APT_MIRROR\n'), 3)
+        self.assertEqual(
+            dockerfile.count(
+                'sed -i "s|archive.ubuntu.com|$APT_MIRROR|g;'
+                ' s|security.ubuntu.com|$APT_MIRROR|g"'), 3)
+        self.assertLess(dockerfile.index('ARG APT_MIRROR=mirrors.aliyun.com'),
+                        dockerfile.index('FROM ubuntu:'))
+
     def test_dockerfile_bakes_in_no_driver_stack(self):
         # kernel modules, firmware, CUDA / ROCm / XRT user space and
         # the Vulkan ICDs all come from the OS host provider via CDI;

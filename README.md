@@ -65,6 +65,12 @@ docker buildx build \
 ```
 
 Local builds require the `kyserai` repository checked out next to this one.
+The apt stages default to the Aliyun Ubuntu archive mirror
+(`APT_MIRROR=mirrors.aliyun.com`) and the Khronos clones go through the
+ghfast.top proxy (`GITHUB_MIRROR=https://ghfast.top/`), matching networks
+that cannot reach the upstream archives; pass `--build-arg APT_MIRROR=<host>`
+or `--build-arg GITHUB_MIRROR=` (empty) to point them at the upstream
+servers.
 Local builds are the only build path: there is no CI image build workflow.
 Build the image and mirror it to wherever KyserOS loads it from.
 
@@ -104,6 +110,10 @@ image half binds the registry reference onto it.
    catalog sync and show the pending review queue, `--provider-ref REF`
    to bind an explicit reference (the NVIDIA and Intel providers go
    this way), and `--no-provider` to leave the provider binding alone.
+   The Dockerfile already defaults to the Aliyun apt mirror and the
+   ghfast.top GitHub proxy; `KYSEROS_GITHUB_MIRROR` (or
+   `--github-mirror`) overrides the latter, and an explicitly empty
+   value falls back to the upstream servers.
 
 The provider artifact carries the OS build id and kernel ABI digest, and
 the device verifies both against the running slot at activation, so the

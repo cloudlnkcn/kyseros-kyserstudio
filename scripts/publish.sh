@@ -27,6 +27,9 @@ Usage: scripts/publish.sh [options]
   --provider-ref    bind this explicit digest-pinned provider reference
                     instead of the latest amd-driver on the service
   --no-provider     leave the provider binding untouched
+  --github-mirror   prefix for the Dockerfile's GitHub clones, for
+                    example https://ghfast.top/ (also via the
+                    KYSEROS_GITHUB_MIRROR environment variable)
 
 By default the script binds the newest kyseros-providers/amd-driver
 upload recorded on the service (the digest the kyseros-amd publish.sh
@@ -39,6 +42,9 @@ skip_build=0
 run_sync=0
 provider_mode=auto        # auto | explicit | skip
 provider_ref=
+# Unset env keeps the ghfast.top default; an explicitly empty value
+# falls back to the upstream GitHub URLs.
+github_mirror=${KYSEROS_GITHUB_MIRROR-https://ghfast.top/}
 while [ $# -gt 0 ]; do
     case $1 in
         --skip-build) skip_build=1 ;;
@@ -46,6 +52,7 @@ while [ $# -gt 0 ]; do
         --provider-ref) provider_mode=explicit
             [ $# -ge 2 ] || usage; provider_ref=$2; shift ;;
         --no-provider) provider_mode=skip ;;
+        --github-mirror) [ $# -ge 2 ] || usage; github_mirror=$2; shift ;;
         *) usage ;;
     esac
     shift
@@ -91,7 +98,26 @@ curl -fsS -c "$cookie" -H 'Content-Type: application/json' \
     -d "$login_payload" "$service_url/api/login" >/dev/null
 
 if [ "$run_sync" -eq 1 ]; then
-    curl -fsS -b "$cookie" -X POST "$service_url/api/catalog/sync" >/dev/null
+    app_repo=$(git remote get-url origin 2>/dev/null \
+        | sed 's|.*/||; s|\.git$||')
+    if [ -n "$app_repo" ]; then
+        if curl -fsS -b "$cookie" "$service_url/api/catalog/sources" \
+                | python3 -c '
+import json, sys
+sys.exit(0 if sys.argv[1] in [s.get("repo") for s in
+    json.load(sys.stdin).get("sources", [])] else 1)
+' "$app_repo"; then
+            echo "catalog source already registered: $app_repo"
+        elif post_bind "catalog source: $app_repo" \
+                "/api/catalog/sources" "{\"repo\":\"$app_repo\"}"; then
+            :
+        else
+            echo "register the $app_repo source manually (dashboard" \
+                "or admin API), then rerun with --sync" >&2
+        fi
+    fi
+    curl -fsS -b "$cookie" -X POST "$service_url/api/catalog/sync" \
+        >/dev/null
     echo "Pending catalog entries:"
     curl -fsS -b "$cookie" "$service_url/api/catalog/staging" \
         | python3 -m json.tool
@@ -105,6 +131,7 @@ if [ "$skip_build" -eq 0 ]; then
     echo "Building $image"
     docker buildx build \
         --build-context kyserai=../kyserai \
+        --build-arg GITHUB_MIRROR="$github_mirror" \
         -t "$image" .
 fi
 
@@ -146,14 +173,17 @@ if [ "$provider_mode" != skip ]; then
         provider_reference=$provider_ref
     else
         # The service upserts the provider row per repo:tag, so the
-        # newest kyseros-providers/<name> row is the live digest.
+        # newest kyseros-providers/<name> row is the live digest. The
+        # bind endpoint matches the DB repo exactly, so the reference
+        # carries no tag: <registry>/<repo>@<digest>.
         provider_reference=$(curl -fsS -b "$cookie" \
             "$service_url/api/registry/images" | python3 -c '
 import json, sys
 wanted = "kyseros-providers/" + sys.argv[1]
 for image in json.load(sys.stdin).get("images", []):
     if image["repo"] == wanted:
-        print(image["reference"] + "@" + image["digest"])
+        registry = image["reference"].split("/", 1)[0]
+        print(registry + "/" + image["repo"] + "@" + image["digest"])
         break
 ' "$provider_name")
         [ -n "$provider_reference" ] || {
@@ -170,9 +200,9 @@ fi
 
 if [ "$failed" -ne 0 ]; then
     echo "Some bindings failed. If a catalog entry does not exist yet," \
-        "push the manifests, run the catalog sync and staging publish" \
-        "(scripts/publish.sh --sync --skip-build shows the queue), then" \
-        "rerun this script with --skip-build." >&2
+        "push the manifests, run scripts/publish.sh --sync --skip-build" \
+        "(registers the catalog source, syncs, and shows the queue)," \
+        "publish the staging entries, then rerun with --skip-build." >&2
     exit 1
 fi
 echo "Done: the image left this machine; the manifests stay in git."

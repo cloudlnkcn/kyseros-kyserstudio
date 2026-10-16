@@ -23,6 +23,16 @@
 
 ARG UBUNTU_VERSION=24.04
 
+# GitHub mirror prefix for the Khronos clones below. Defaults to the
+# ghfast.top proxy for networks that cannot reach github.com directly;
+# pass an empty value to use the upstream URLs.
+ARG GITHUB_MIRROR=https://ghfast.top/
+
+# Ubuntu archive mirror host, used by every stage below. Defaults to
+# the Aliyun mirror; pass another host (or the upstream
+# archive.ubuntu.com) to override.
+ARG APT_MIRROR=mirrors.aliyun.com
+
 # Pinned Khronos Vulkan release built for every variant (Ubuntu
 # 24.04 ships an older 1.3.x loader in its distro packages).
 ARG VULKAN_VERSION=1.4.365
@@ -32,7 +42,12 @@ ARG VULKAN_VERSION=1.4.365
 # ------------------------------------------------------------
 FROM ubuntu:${UBUNTU_VERSION} AS builder
 
+ARG APT_MIRROR
+
 ENV DEBIAN_FRONTEND=noninteractive
+
+RUN sed -i "s|archive.ubuntu.com|$APT_MIRROR|g; s|security.ubuntu.com|$APT_MIRROR|g" \
+        /etc/apt/sources.list.d/ubuntu.sources
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -64,14 +79,20 @@ RUN rm -rf build \
 FROM ubuntu:${UBUNTU_VERSION} AS vulkan-loader
 
 ARG VULKAN_VERSION
+ARG GITHUB_MIRROR
+ARG APT_MIRROR
 
 ENV DEBIAN_FRONTEND=noninteractive
+
+RUN sed -i "s|archive.ubuntu.com|$APT_MIRROR|g; s|security.ubuntu.com|$APT_MIRROR|g" \
+        /etc/apt/sources.list.d/ubuntu.sources
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
     ninja-build \
     git \
+    pkg-config \
     ca-certificates \
     libx11-xcb-dev \
     libxkbcommon-dev \
@@ -80,14 +101,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 RUN git clone --depth 1 --branch v${VULKAN_VERSION} \
-        https://github.com/KhronosGroup/Vulkan-Headers.git \
+        ${GITHUB_MIRROR}https://github.com/KhronosGroup/Vulkan-Headers.git \
     && cmake -S Vulkan-Headers -B Vulkan-Headers/build -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=/opt/vulkan \
     && cmake --install Vulkan-Headers/build
 
 RUN git clone --depth 1 --branch v${VULKAN_VERSION} \
-        https://github.com/KhronosGroup/Vulkan-Loader.git \
+        ${GITHUB_MIRROR}https://github.com/KhronosGroup/Vulkan-Loader.git \
     && cmake -S Vulkan-Loader -B Vulkan-Loader/build -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_TESTS=OFF \
@@ -105,7 +126,12 @@ RUN git clone --depth 1 --branch v${VULKAN_VERSION} \
 # ------------------------------------------------------------
 FROM ubuntu:${UBUNTU_VERSION}
 
+ARG APT_MIRROR
+
 ENV DEBIAN_FRONTEND=noninteractive
+
+RUN sed -i "s|archive.ubuntu.com|$APT_MIRROR|g; s|security.ubuntu.com|$APT_MIRROR|g" \
+        /etc/apt/sources.list.d/ubuntu.sources
 
 # Common runtime libraries for kyseraid plus the distro Vulkan
 # loader and tools. The loader is shared by every variant and
