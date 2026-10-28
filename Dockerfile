@@ -63,6 +63,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# kyserai's CMake FetchContent pins third-party sources (mbedTLS for
+# download digest verification) on github.com, which this build network
+# cannot reach directly. Rewrite every github.com git URL through the
+# GITHUB_MIRROR prefix, like the Khronos clones in the stage below; an
+# empty mirror value rewrites to the upstream URL unchanged.
+ARG GITHUB_MIRROR
+RUN git config --global \
+        url."${GITHUB_MIRROR}https://github.com/".insteadOf \
+        https://github.com/
+
 WORKDIR /app
 
 COPY --from=kyserai . /app
@@ -139,6 +149,9 @@ RUN sed -i "s|archive.ubuntu.com|$APT_MIRROR|g; s|security.ubuntu.com|$APT_MIRRO
 # and audio libraries are the media runtime that app backends
 # (for example the bundled gufo engine) link directly; ffmpeg and
 # ffprobe are invoked as separate executables for media output.
+# xz-utils: backend release archives are .tar.xz and Kyserai extracts
+# them by invoking the system tar, which shells out to xz — without
+# it every backend install dies on "tar: xz: Cannot exec".
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libcurl4 \
@@ -159,6 +172,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     unzip \
     jq \
+    xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Override the distro libvulkan1 with the current Khronos loader;
