@@ -1,12 +1,12 @@
 {
   "slug": "kyserai",
-  "version": "v10.25.7-kyseros.1",
+  "version": "v10.26.1-kyseros.1",
   "name": "Kyserai (NVIDIA)",
   "icon": "icon.png",
   "description": "Local LLM server with OpenAI-compatible APIs, accelerated by NVIDIA CUDA GPUs with Vulkan backend support",
-  "image": "kyserai:v10.25.7-kyseros.1",
+  "image": "kyserai:v10.26.1-kyseros.1",
   "source": "https://github.com/cloudlnkcn/kyserai",
-  "source_ref": "v10.25.7",
+  "source_ref": "v10.26.1",
   "default_port": 13305,
   "volumes": {
     "data": {

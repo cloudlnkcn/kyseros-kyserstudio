@@ -8,7 +8,7 @@
 #
 #   docker buildx build \
 #       --build-context kyserai=../kyserai \
-#       -t kyserai:v10.25.7-kyseros.1 .
+#       -t kyserai:v10.26.1-kyseros.1 .
 #
 # Per the KyserOS provider contract (kyseros-nvidia, kyseros-amd,
 # kyseros-intel), the image ships no GPU driver stack: kernel
@@ -35,7 +35,7 @@ ARG APT_MIRROR=mirrors.aliyun.com
 
 # Pinned Khronos Vulkan release built for every variant (Ubuntu
 # 24.04 ships an older 1.3.x loader in its distro packages).
-ARG VULKAN_VERSION=1.4.365
+ARG VULKAN_VERSION=1.4.366
 
 # ------------------------------------------------------------
 # 1. Build stage: compile the Kyserai C++ server and web app
@@ -135,7 +135,10 @@ RUN sed -i "s|archive.ubuntu.com|$APT_MIRROR|g; s|security.ubuntu.com|$APT_MIRRO
 
 # Common runtime libraries for kyseraid plus the distro Vulkan
 # loader and tools. The loader is shared by every variant and
-# feeds the Vulkan and SYCL llama.cpp backends.
+# feeds the Vulkan and SYCL llama.cpp backends. The PNG/JPEG/WebP
+# and audio libraries are the media runtime that app backends
+# (for example the bundled gufo engine) link directly; ffmpeg and
+# ffprobe are invoked as separate executables for media output.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libcurl4 \
@@ -147,6 +150,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     vulkan-tools \
     libgomp1 \
     libatomic1 \
+    libicu74 \
+    libpng16-16 \
+    libjpeg-turbo8 \
+    libwebp7 \
+    libsndfile1 \
+    libsoxr0 \
+    ffmpeg \
     unzip \
     jq \
     && rm -rf /var/lib/apt/lists/*
