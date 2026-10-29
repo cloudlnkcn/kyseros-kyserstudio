@@ -8,7 +8,7 @@
 #
 #   docker buildx build \
 #       --build-context kyserai=../kyserai \
-#       -t kyserai:v10.26.2-kyseros.2 .
+#       -t kyserai:v10.26.3-kyseros.1 .
 #
 # Per the KyserOS provider contract (kyseros-nvidia, kyseros-amd,
 # kyseros-intel), the image ships no GPU driver stack: kernel

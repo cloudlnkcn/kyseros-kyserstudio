@@ -72,7 +72,7 @@ all three variants:
 ```sh
 docker buildx build \
     --build-context kyserai=../kyserai \
-    -t kyserai:v10.26.2-kyseros.2 .
+    -t kyserai:v10.26.3-kyseros.1 .
 ```
 
 Local builds require the `kyserai` repository checked out next to this one.
@@ -88,7 +88,7 @@ Build the image and mirror it to wherever KyserOS loads it from.
 ## Versioning
 
 KyserOS package versions use `<kyserai-release>-kyseros.<revision>`. The
-current release is `v10.26.2-kyseros.2`, based on Kyserai `v10.26.2`, and
+current release is `v10.26.3-kyseros.1`, based on Kyserai `v10.26.3`, and
 the image tag matches the package version. Bump the version together with
 the `source_ref` and `image` in each manifest and the `VULKAN_VERSION` pin
 in the Dockerfile.

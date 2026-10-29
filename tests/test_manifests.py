@@ -5,9 +5,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = 'v10.26.2-kyseros.2'
+VERSION = 'v10.26.3-kyseros.1'
 SOURCE = 'https://github.com/cloudlnkcn/kyserai'
-SOURCE_REF = 'v10.26.2'
+SOURCE_REF = 'v10.26.3'
 IMAGE = f'kyserai:{VERSION}'
 # One shared image; the accelerator association lives in each
 # variant's CDI request, matched to the Kyseros provider repo
