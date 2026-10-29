@@ -25,6 +25,17 @@ A variant's directory name (`nvidia` / `amd` / `intel`) is the catalog's
 variant column; the slug and the CDI request keep the manifest and its
 provider a matched pair.
 
+## LAN discovery is the device's job
+
+The image runs kyseraid with `--no-broadcast`: inside KyserOS the
+app's own UDP beacon can never cross its isolated bridge network, and
+the address it would advertise is unroutable. Each manifest instead
+declares `lan_beacon` (UDP 13305, service `kyserai`, URL path
+`/api/v1/`), and the device broadcasts that beacon on the app's behalf
+from the host network namespace, advertising the device's LAN address
+and the app's device-facing port. See the KyserOS app docs for the
+field semantics.
+
 ## No drivers are baked in
 
 Following the KyserOS provider contract, the image carries no GPU driver
@@ -61,7 +72,7 @@ all three variants:
 ```sh
 docker buildx build \
     --build-context kyserai=../kyserai \
-    -t kyserai:v10.26.1-kyseros.1 .
+    -t kyserai:v10.26.2-kyseros.2 .
 ```
 
 Local builds require the `kyserai` repository checked out next to this one.
@@ -77,7 +88,7 @@ Build the image and mirror it to wherever KyserOS loads it from.
 ## Versioning
 
 KyserOS package versions use `<kyserai-release>-kyseros.<revision>`. The
-current release is `v10.26.1-kyseros.1`, based on Kyserai `v10.26.1`, and
+current release is `v10.26.2-kyseros.2`, based on Kyserai `v10.26.2`, and
 the image tag matches the package version. Bump the version together with
 the `source_ref` and `image` in each manifest and the `VULKAN_VERSION` pin
 in the Dockerfile.

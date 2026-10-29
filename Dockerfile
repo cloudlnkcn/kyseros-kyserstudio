@@ -8,7 +8,7 @@
 #
 #   docker buildx build \
 #       --build-context kyserai=../kyserai \
-#       -t kyserai:v10.26.1-kyseros.1 .
+#       -t kyserai:v10.26.2-kyseros.2 .
 #
 # Per the KyserOS provider contract (kyseros-nvidia, kyseros-amd,
 # kyseros-intel), the image ships no GPU driver stack: kernel
@@ -211,4 +211,7 @@ EXPOSE 13305
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:13305/live || exit 1
 
-CMD ["./kyseraid", "--host", "0.0.0.0"]
+# KyserOS terminates authenticated LAN HTTPS and routes to this port,
+# so Kyserai's UDP beacon would only ever broadcast the container's
+# bridge IP to the bridge subnet; discovery is the platform's job.
+CMD ["./kyseraid", "--host", "0.0.0.0", "--no-broadcast"]

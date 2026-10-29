@@ -1,13 +1,18 @@
 {
   "slug": "kyserai-rocm",
-  "version": "v10.26.1-kyseros.1",
+  "version": "v10.26.2-kyseros.2",
   "name": "Kyserai (AMD)",
   "icon": "icon.png",
   "description": "Local LLM server with OpenAI-compatible APIs, accelerated by AMD ROCm GPUs with Vulkan backend support",
-  "image": "kyserai:v10.26.1-kyseros.1",
+  "image": "kyserai:v10.26.2-kyseros.2",
   "source": "https://github.com/cloudlnkcn/kyserai",
-  "source_ref": "v10.26.1",
+  "source_ref": "v10.26.2",
   "default_port": 13305,
+  "lan_beacon": {
+    "udp_port": 13305,
+    "service": "kyserai",
+    "url_path": "/api/v1/"
+  },
   "volumes": {
     "data": {
       "mount": "/var/lib/kyserai",

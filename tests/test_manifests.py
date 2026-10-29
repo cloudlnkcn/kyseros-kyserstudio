@@ -5,9 +5,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = 'v10.26.1-kyseros.1'
+VERSION = 'v10.26.2-kyseros.2'
 SOURCE = 'https://github.com/cloudlnkcn/kyserai'
-SOURCE_REF = 'v10.26.1'
+SOURCE_REF = 'v10.26.2'
 IMAGE = f'kyserai:{VERSION}'
 # One shared image; the accelerator association lives in each
 # variant's CDI request, matched to the Kyseros provider repo
@@ -61,6 +61,19 @@ class ManifestTests(unittest.TestCase):
 
         self.assertEqual(
             len({manifest['slug'] for manifest in manifests.values()}), 3)
+
+    def test_manifests_declare_the_platform_lan_beacon(self):
+        # the device broadcasts this on the app's behalf from the host
+        # network namespace (kyseros lan_beacon); the container's own
+        # UDP beacon cannot cross its isolated bridge network, so the
+        # image runs kyseraid with --no-broadcast
+        for variant in VARIANTS:
+            manifest = load_manifest(variant)
+            self.assertEqual(manifest['lan_beacon'], {
+                'udp_port': 13305,
+                'service': 'kyserai',
+                'url_path': '/api/v1/',
+            })
 
     def test_manifests_do_not_wrap_ollama(self):
         for variant in VARIANTS:
