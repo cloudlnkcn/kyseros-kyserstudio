@@ -1,12 +1,12 @@
 {
   "slug": "kyserai-intel",
-  "version": "v10.26.3-kyseros.1",
+  "version": "v10.26.4-kyseros.1",
   "name": "Kyserai (Intel)",
   "icon": "icon.png",
   "description": "Local LLM server with OpenAI-compatible APIs, accelerated by Intel GPUs via Vulkan and SYCL",
-  "image": "kyserai:v10.26.3-kyseros.1",
+  "image": "kyserai:v10.26.4-kyseros.1",
   "source": "https://github.com/cloudlnkcn/kyserai",
-  "source_ref": "v10.26.3",
+  "source_ref": "v10.26.4",
   "default_port": 13305,
   "lan_beacon": {
     "udp_port": 13305,
