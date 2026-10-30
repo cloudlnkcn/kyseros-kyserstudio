@@ -206,7 +206,9 @@ COPY --from=builder /app/build/resources ./resources
 
 RUN chmod +x ./kyseraid ./kyserai
 
-EXPOSE 13305
+# 13305 is the plain HTTP listener; kyseraid's default TLS config
+# (tls.enabled) also serves HTTPS on 13306.
+EXPOSE 13305 13306
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:13305/live || exit 1

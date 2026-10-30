@@ -96,7 +96,8 @@ class ManifestTests(unittest.TestCase):
     def test_dockerfile_builds_kyserai_from_named_context(self):
         dockerfile = (ROOT / 'Dockerfile').read_text()
         self.assertIn('COPY --from=kyserai . /app', dockerfile)
-        self.assertIn('EXPOSE 13305', dockerfile)
+        # 13305 HTTP, 13306 the default TLS listener
+        self.assertIn('EXPOSE 13305 13306', dockerfile)
 
     def test_dockerfile_builds_one_image_without_gpu_variant(self):
         # variants differ only in their CDI request, never in image
